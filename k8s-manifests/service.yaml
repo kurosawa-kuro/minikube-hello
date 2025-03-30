@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: express-hello-service
+spec:
+  selector:
+    app: express-hello
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30080
