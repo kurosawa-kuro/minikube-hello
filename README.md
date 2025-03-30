@@ -256,6 +256,14 @@ minikube ip
 ### 6-2. Nginx 設定ファイル
 
 ```bash
+sudo dnf install -y nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+
+nginx -v
+```
+
+```bash
 sudo tee /etc/nginx/conf.d/k8s-proxy.conf > /dev/null <<EOF
 server {
     listen 80;
