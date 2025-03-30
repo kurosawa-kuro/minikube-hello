@@ -1,26 +1,35 @@
-以下の手順は **Amazon Linux 2023** 環境を前提とし、**Docker / Minikube / kubectl / Node.js / Nginx 等がすでにインストール済み**である状況を想定しています。  
-また、作業ディレクトリは `~/dev/minikube-hello` を作成し、その中で進めていきます。  
-セキュリティグループのポート80を開放済みであることも前提とします。
+以下に、**Amazon Linux 2023** で **Nginx が未インストール**の場合の手順を追記しました。  
+それ以外の部分は変わっていませんが、これで「Nginx がすでにインストール済みであること」を前提としない手順になります。
 
 ---
 
 # Minikube + Node.js (Express) “Hello World” on Amazon Linux 2023
 
-## 手順の概要
+以下の手順は **Amazon Linux 2023** 環境を前提に、**Docker / Minikube / kubectl / Node.js** は既にインストールされていると想定しています。  
+また、**Nginx が未インストールの場合**の導入方法を追記しています。  
+セキュリティグループで **ポート80** を開放済みであることも前提とします。
 
-1. **作業ディレクトリの作成 (`~/dev/minikube-hello`)**  
-2. **Node.js (Express) “Hello World” アプリ作成**  
-3. **Minikube クラスタ起動**  
-4. **Dockerfile 作成 & イメージビルド (Minikube Dockerデーモン)**  
-5. **Kubernetes マニフェスト作成 & 適用**  
-6. **Nginx リバースプロキシ設定**  
-7. **動作確認**  
-8. **Minikube クラスタ停止 & 削除** (任意)
+---
 
-> **前提**:  
-> - Amazon Linux 2023 上で、Docker / Minikube / kubectl / Node.js / Nginx がインストール済み  
-> - セキュリティグループで **ポート80** を開放  
-> - EC2 インスタンスのユーザーは `ec2-user` (想定)
+## 0. Nginx のインストール (未導入の場合のみ)
+
+> **Amazon Linux 2023** では `amazon-linux-extras` は利用できないため、  
+> 代わりに `dnf` を使って Nginx をインストールします。
+
+```bash
+sudo dnf install -y nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+インストール後に以下でバージョンを確認できます。
+
+```bash
+nginx -v
+# nginx version: nginx/1.22.1 (など)
+```
+
+> 既に Nginx が導入済みの場合は、このステップをスキップしてください。
 
 ---
 
@@ -47,6 +56,8 @@ mkdir express-hello
 mkdir k8s-manifests
 ```
 
+ディレクトリ構成は以下のようになります。
+
 ```
 ~/dev/minikube-hello/
   ├─ express-hello/
@@ -66,41 +77,41 @@ cd ~/dev/minikube-hello/express-hello
 touch index.js package.json Dockerfile
 ```
 
-1. **index.js**
+#### (1) `index.js`
 
-   ```bash
-   cat << 'EOF' > index.js
-   const express = require('express');
-   const app = express();
-   const PORT = process.env.PORT || 3000;
+```bash
+cat << 'EOF' > index.js
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-   app.get('/', (req, res) => {
-     console.log("GET / へアクセスがありました");
-     res.send('Hello World');
-   });
+app.get('/', (req, res) => {
+  console.log("GET / へアクセスがありました");
+  res.send('Hello World');
+});
 
-   app.listen(PORT, () => {
-     console.log(`Server is running on port ${PORT}`);
-   });
-   EOF
-   ```
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+EOF
+```
 
-2. **package.json**
+#### (2) `package.json`
 
-   ```bash
-   cat << 'EOF' > package.json
-   {
-     "name": "express-hello-world",
-     "version": "1.0.0",
-     "scripts": {
-       "start": "node index.js"
-     },
-     "dependencies": {
-       "express": "^4.18.2"
-     }
-   }
-   EOF
-   ```
+```bash
+cat << 'EOF' > package.json
+{
+  "name": "express-hello-world",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+EOF
+```
 
 ### 2-2. 依存パッケージのインストール
 
@@ -179,51 +190,51 @@ cd ~/dev/minikube-hello/k8s-manifests
 touch deployment.yaml service.yaml
 ```
 
-1. **deployment.yaml**
+#### (1) `deployment.yaml`
 
-   ```bash
-   cat << 'EOF' > deployment.yaml
-   apiVersion: apps/v1
-   kind: Deployment
-   metadata:
-     name: express-hello-deployment
-   spec:
-     replicas: 1
-     selector:
-       matchLabels:
-         app: express-hello
-     template:
-       metadata:
-         labels:
-           app: express-hello
-       spec:
-         containers:
-           - name: express-hello-container
-             image: express-hello-world:latest
-             imagePullPolicy: IfNotPresent
-             ports:
-               - containerPort: 3000
-   EOF
-   ```
+```bash
+cat << 'EOF' > deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: express-hello-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: express-hello
+  template:
+    metadata:
+      labels:
+        app: express-hello
+    spec:
+      containers:
+        - name: express-hello-container
+          image: express-hello-world:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+EOF
+```
 
-2. **service.yaml**
+#### (2) `service.yaml`
 
-   ```bash
-   cat << 'EOF' > service.yaml
-   apiVersion: v1
-   kind: Service
-   metadata:
-     name: express-hello-service
-   spec:
-     selector:
-       app: express-hello
-     type: NodePort
-     ports:
-       - port: 3000
-         targetPort: 3000
-         nodePort: 30080
-   EOF
-   ```
+```bash
+cat << 'EOF' > service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: express-hello-service
+spec:
+  selector:
+    app: express-hello
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30080
+EOF
+```
 
 ### 5-2. Kubernetes へデプロイ
 
@@ -256,14 +267,6 @@ minikube ip
 ### 6-2. Nginx 設定ファイル
 
 ```bash
-sudo dnf install -y nginx
-sudo systemctl enable nginx
-sudo systemctl start nginx
-
-nginx -v
-```
-
-```bash
 sudo tee /etc/nginx/conf.d/k8s-proxy.conf > /dev/null <<EOF
 server {
     listen 80;
@@ -277,7 +280,8 @@ EOF
 sudo systemctl restart nginx
 ```
 
-> **注意**: 既存の `/etc/nginx/conf.d/default.conf` と競合する場合はコメントアウト・削除してください。
+> **注意**  
+> 既存の `/etc/nginx/conf.d/default.conf` などが競合する場合は、コメントアウトまたは削除しておきましょう。
 
 ---
 
@@ -290,7 +294,7 @@ curl http://<EC2_PUBLIC_IP>/
 # => "Hello World"
 ```
 
-- ブラウザで `http://<EC2_PUBLIC_IP>/` にアクセスしても同様に確認できます。
+- ブラウザで `http://<EC2_PUBLIC_IP>/` にアクセスしてもOKです。
 
 ---
 
@@ -327,11 +331,15 @@ minikube delete
 
 # まとめ
 
-- **Amazon Linux 2023** で **Docker / Minikube / kubectl / Node.js / Nginx** が既に導入済みの環境を利用  
-- `~/dev/minikube-hello` 以下に **Express アプリ** と **Kubernetes マニフェスト** を配置  
-- **Minikube** でシングルノードKubernetesを起動  
-- **Dockerfile** をビルドし **Deployment & NodePort Service** でコンテナを稼働  
-- **Nginx** をリバースプロキシとしてパブリックIP(80) から Minikube の NodePort(30080) へ転送  
-- 確認後は `minikube stop` / `minikube delete` で停止・削除可能  
+1. **Amazon Linux 2023 で Nginx をインストール** (未導入の場合)  
+   ```bash
+   sudo dnf install -y nginx
+   sudo systemctl enable nginx
+   sudo systemctl start nginx
+   ```  
+2. `~/dev/minikube-hello` に **Express アプリ** と **Kubernetes マニフェスト** を配置  
+3. **Minikube (Dockerドライバ)** を起動し、Docker イメージをビルドした後、Deployment & NodePort Service でコンテナを稼働  
+4. **Nginx** でパブリックIP(80) から NodePort(30080) へリバースプロキシ  
+5. `minikube stop` / `minikube delete` で停止・削除  
 
 これで **Node.js (Express) の “Hello World”** を簡単に Kubernetes で動かすデモ環境が構築できます。ぜひお試しください。
